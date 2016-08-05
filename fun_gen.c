@@ -1,5 +1,8 @@
 #include <msp430.h>
 
+// TODO: NEED TO CHANGE CHIPSELECT PIN IN DAC FUNCTIONS
+// CURRENTLY HOOKED UP TO 3.3 in the schematic
+
 static unsigned adc_val;
 
 unsigned sin[64] = {0x200,0x232,0x263,0x294,0x2c3,0x2f1,0x31c,0x344,

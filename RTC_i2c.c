@@ -2,67 +2,12 @@
 #include "RTC_i2c.h"
 #include "LCD.h"
 
-unsigned int alm_flag = 0;
-
-RTC_Time RTC_timedate;
-
-
-int main(void){
-
-	WDTCTL = WDTPW | WDTHOLD;	// Stop watchdog timer
-	init_RTC();
-	adc_init();
-	//volatile unsigned seconds, minutes, hours = 0;
-	lcd_init();
-	default_set();
-	write_time_RTC(&RTC_timedate);
-
-	while(1){
-
-		read_time_RTC(&RTC_timedate);
-		current_time_to_LCD(&RTC_timedate);
-		lcd_command(0xC0);
-		current_date_to_LCD(&RTC_timedate);
-		lcd_command(0x02);
-		unsigned int buttons[2];
-		buttons[0] = P2IN & 0x02;
-		buttons[1] = P2IN & 0x04;
-		if(buttons[0] != 0 && alm_flag == 1){
-					alm_flag = 0;
-		}
-		if(buttons[1] != 0 && buttons[0] == 0){ // top button pressed
-			set_new_time(&RTC_timedate);
-			write_time_RTC(&RTC_timedate);
-		}
-		if(buttons[0] != 0 && buttons[1] != 0){
-			set_new_alarm(&RTC_timedate);
-			write_time_ALM0(&RTC_timedate);
-			alm_flag = 1;
-		}
-		P3DIR |= 0x10;
-		unsigned p36_temp = P3IN & 0x40;
-		unsigned char p3_temp = P3IN & 0x20;
-
-		if(alm_flag == 1 && p3_temp == 0){
-			P3OUT ^= 0x10;
-			//__delay_cycles(5000);
-		}
-		else{
-			P3OUT &= 0x06;
-		}
-
-
-	}
-
-}
-
 
 
 void init_i2c(){
 	WDTCTL = WDTPW + WDTHOLD;                 // Stop WDT	
-//	P2DIR |= (1 << 1);
-//	P2SEL |= (1 << 1);                        // SMCLK Output
-	P3DIR = 0x06;
+
+	P3DIR |= 0x06;
 	P3SEL |= 0x06;                            // Assign I2C pins to USCI_B0
 }
 
@@ -250,15 +195,7 @@ void set_new_alarm(RTC_Time *definedTime){
 	done = 1;	
 	lcd_command(0x02);
 }
-void default_set(){
-	RTC_timedate.seconds = seconds_default;
-	RTC_timedate.minutes = minutes_default;
-	RTC_timedate.hours 	= hours_default;
-	RTC_timedate.weekday = weekday_default;
-	RTC_timedate.date   = date_default;
-	RTC_timedate.month = month_default;
-	RTC_timedate.year = year_default;
-}
+
 unsigned char map_hex_dec(unsigned char val){
 	unsigned char temp = (val/10)*6;
 	return val+temp;
@@ -367,6 +304,7 @@ void write_time_RTC(RTC_Time *definedTime){
 }
 
 void read_time_RTC(RTC_Time *definedTime){
+
 	definedTime -> seconds = (read_i2c(CTRL_BYTE, rtc_seconds)) & 0x7f;
 	definedTime -> minutes = (read_i2c(CTRL_BYTE, rtc_minutes));
 	definedTime -> hours   = (read_i2c(CTRL_BYTE, rtc_hours));
@@ -374,8 +312,9 @@ void read_time_RTC(RTC_Time *definedTime){
 	definedTime -> date    = (read_i2c(CTRL_BYTE, rtc_date));
 	definedTime -> month   = (read_i2c(CTRL_BYTE, rtc_month)) & 0x1F;
 	definedTime -> year    = (read_i2c(CTRL_BYTE, rtc_year));
+
 }
-void write_i2c(unsigned char slave_add, unsigned char reg, unsigned char data){
+void write_i2c(unsigned char 	slave_add, unsigned char reg, unsigned char data){
 	TX_setup(slave_add);
 	tx_data[0] = reg;
 	tx_data[1] = data;
@@ -425,8 +364,8 @@ void TX_setup(unsigned char address){ //this will be run everytime a transmit wi
 	UCB0CTL1 |= UCSWRST;                      // Enable SW reset
   	UCB0CTL0 = UCMST + UCMODE_3 + UCSYNC;     // I2C Master, synchronous mode
   	UCB0CTL1 = UCSSEL_2 + UCSWRST;            // Use SMCLK, keep SW reset
-  	UCB0BR0 = 12;                             // fSCL = SMCLK/12 = ~100kHz
-  	UCB0BR1 = 0;
+  	UCB0BR0 = 0;                             // fSCL = SMCLK/12 = ~100kHz
+  	UCB0BR1 = 1;
 	UCB0I2CSA = address;		//setting slave address
 	UCB0CTL1 &= ~UCSWRST;  	//clearing SW reset to resume operation
 	IE2 |= UCB0TXIE;  	//enabling TX interrupt
@@ -440,8 +379,8 @@ void RX_setup(unsigned char address){
 	UCB0CTL1 |= UCSWRST; // Enable SW reset
 	UCB0CTL0 = UCMST + UCMODE_3 + UCSYNC; // I2C Master, synchronous mode
 	UCB0CTL1 = UCSSEL_2 + UCSWRST; // Use SMCLK, keep SW reset
-	UCB0BR0 = 12; // fSCL = SMCLK/12 = ~100kHz
-	UCB0BR1 = 0;
+	UCB0BR0 = 0; // fSCL = SMCLK/12 = ~100kHz
+	UCB0BR1 = 1;
 	UCB0I2CSA = address; // Slave Address
 	UCB0CTL1 &= ~UCSWRST; // Clear SW reset, resume operation
 	IE2 |= UCB0RXIE; // Enable RX interrupt
@@ -472,16 +411,8 @@ __interrupt void USCIAB0TX_ISR(void){
 			}
 		}
 	}
-
 }
 
-void adc_init(){
-	ADC10CTL0 = ADC10SHT_2 + ADC10ON + ADC10IE; // ADC10ON, interrupt enabled
-	ADC10AE0 |= 0x01;
-}
-#pragma vector=ADC10_VECTOR
-__interrupt void ADC10_ISR(void){
-	adc_val = ADC10MEM;
-	__bic_SR_register_on_exit(CPUOFF);        // Clear CPUOFF bit from 0(SR)
-}
+
+
 
